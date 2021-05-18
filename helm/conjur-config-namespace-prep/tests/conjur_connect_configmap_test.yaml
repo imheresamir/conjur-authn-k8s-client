@@ -38,7 +38,7 @@ tests:
       # Confirm that default values have been used
       - equal:
           path: metadata.name
-          value: conjur-connect-configmap
+          value: conjur-connect
 
 
      # Confirm that values are read from lookup()

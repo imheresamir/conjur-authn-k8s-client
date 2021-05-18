@@ -55,13 +55,13 @@ tests:
           value: authn-k8s-configmap
       - equal:
           path: data.authnK8sClusterRole
-          value: authn-k8s-clusterrole
+          value: conjur-clusterrole
       - equal:
          path: data.authnK8sNamespace
          value: NAMESPACE
       - equal:
           path: data.authnK8sServiceAccount
-          value: authn-k8s-serviceaccount
+          value: conjur-serviceaccount
       - equal:
           path: data.conjurAccount
           value: default
