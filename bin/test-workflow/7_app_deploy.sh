@@ -18,7 +18,6 @@ main() {
     IMAGE_PULL_POLICY='Always'
   fi
 
-  deploy_app_backend
   # deploy_secretless_app
   deploy_sidecar_app
   # deploy_init_container_app
@@ -75,83 +74,32 @@ init_connection_specs() {
 }
 
 ###########################
-deploy_app_backend() {
-  $cli delete --ignore-not-found \
-     service/test-summon-init-app-backend \
-     service/test-summon-sidecar-app-backend \
-     service/test-secretless-app-backend \
-     statefulset/summon-init-pg \
-     statefulset/secretless-pg \
-     statefulset/summon-init-mysql \
-     statefulset/summon-sidecar-mysql \
-     statefulset/secretless-mysql \
-     secret/test-app-backend-certs
-
-  ensure_env_database
-  case "${TEST_APP_DATABASE}" in
-  postgres)
-    echo "Create secrets for test app backend"
-    $cli --namespace $TEST_APP_NAMESPACE_NAME \
-      create secret generic \
-      test-app-backend-certs \
-      --from-file=server.crt=./etc/ca.pem \
-      --from-file=server.key=./etc/ca-key.pem
-
-    echo "Deploying test app backend"
-
-    # Install postgresql helm chart
-    if [ "$(helm list -q -n $TEST_APP_NAMESPACE_NAME | grep "^summon-sidecar-app-backend-pg$")" = "summon-sidecar-app-backend-pg" ]; then
-        helm uninstall summon-sidecar-app-backend-pg -n "$TEST_APP_NAMESPACE_NAME"
-    fi
-
-    kubectl delete --ignore-not-found pvc -l app.kubernetes.io/instance=summon-sidecar-app-backend-pg
-
-    helm repo add bitnami https://charts.bitnami.com/bitnami
-
-    helm install summon-sidecar-app-backend-pg bitnami/postgresql -n $TEST_APP_NAMESPACE_NAME --debug --wait \
-        --set image.repository="postgres" \
-        --set image.tag="9.6" \
-        --set postgresqlDataDir="/data/pgdata" \
-        --set persistence.mountPath="/data/" \
-        --set fullnameOverride="test-summon-sidecar-app-backend" \
-        --set tls.enabled=true \
-        --set volumePermissions.enabled=true \
-        --set tls.certificatesSecret="test-app-backend-certs" \
-        --set tls.certFilename="server.crt" \
-        --set tls.certKeyFilename="server.key" \
-        --set securityContext.fsGroup="999" \
-        --set postgresqlDatabase="test_app" \
-        --set postgresqlUsername="test_app" \
-        --set postgresqlPassword=$SAMPLE_APP_BACKEND_DB_PASSWORD
-    ;;
-  mysql)
-    echo "Deploying test app backend"
-
-    test_app_mysql_docker_image="mysql/mysql-server:5.7"
-
-    sed "s#{{ TEST_APP_DATABASE_DOCKER_IMAGE }}#$test_app_mysql_docker_image#g" ./$PLATFORM/tmp.${TEST_APP_NAMESPACE_NAME}.mysql.yml |
-      sed "s#{{ TEST_APP_NAMESPACE_NAME }}#$TEST_APP_NAMESPACE_NAME#g" |
-      sed "s#{{ IMAGE_PULL_POLICY }}#$IMAGE_PULL_POLICY#g" |
-      $cli create -f -
-    ;;
-  esac
-
-}
-
-###########################
 deploy_sidecar_app() {
+  echo "Create secrets for test app backend"
+  $cli delete --ignore-not-found secrets test-app-backend-certs
+
+  $cli --namespace $TEST_APP_NAMESPACE_NAME \
+    create secret generic \
+    test-app-backend-certs \
+    --from-file=server.crt=./etc/ca.pem \
+    --from-file=server.key=./etc/ca-key.pem
+
+  $cli delete --ignore-not-found pvc -l app.kubernetes.io/instance=app-summon-sidecar
+
   pushd $(dirname "$0")/../../helm/app-deploy > /dev/null
     # Deploy a given app with yet another subset of the subset of our golden configmap, allowing
     # connection to Conjur
     announce "Installing sidecar application chart"
-    if [ "$(helm list -q -n $TEST_APP_NAMESPACE_NAME | grep "^sidecar-app$")" = "sidecar-app" ]; then
-        helm uninstall sidecar-app -n "$TEST_APP_NAMESPACE_NAME"
-    fi
 
-    helm install sidecar-app . -n "$TEST_APP_NAMESPACE_NAME" --debug --wait \
+    pushd charts/app-summon-sidecar > /dev/null
+      helm dependency update
+    popd > /dev/null
+
+    helm upgrade --install app-summon-sidecar . -n "$TEST_APP_NAMESPACE_NAME" --debug --wait \
         --set app-summon-sidecar.enabled=true \
         --set global.conjur.conjurConnConfigMap="conjur-connect-configmap" \
-        --set app-summon-sidecar.conjur.authnLogin="$CONJUR_AUTHN_LOGIN_PREFIX/test-app-summon-sidecar"
+        --set app-summon-sidecar.conjur.authnLogin="$CONJUR_AUTHN_LOGIN_PREFIX/test-app-summon-sidecar" \
+        --set app-summon-sidecar.postgresql.postgresqlPassword="$SAMPLE_APP_BACKEND_DB_PASSWORD"
   popd > /dev/null
 
   echo "Test app/sidecar deployed."

@@ -17,7 +17,36 @@ authnClient:
 
 conjur:
   authnConfigMap:
-    create: true
     name: "conjur-authn-configmap"
   # host/conjur/authn-k8s/<authenticator-ID>/<conjur-policy-layer-or-group>/<app-host-id>
   authnLogin:
+
+postgresql:
+  # These are required values
+  # postgresqlPassword:
+
+  image:
+    repository: postgres
+    tag: 9.6
+
+  postgresqlDataDir: /data/pgdata
+
+  persistence:
+    mountPath: /data/
+
+  fullnameOverride: test-summon-sidecar-app-backend
+
+  volumePermissions:
+    enabled: true
+
+  tls:
+    enabled: true
+    certificatesSecret: test-app-backend-certs
+    certFilename: server.crt
+    certKeyFilename: server.key
+
+  securityContext:
+    fsGroup: 999
+
+  postgresqlDatabase: test_app
+  postgresqlUsername: test_app

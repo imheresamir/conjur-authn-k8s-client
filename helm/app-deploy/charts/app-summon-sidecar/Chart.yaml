@@ -14,3 +14,8 @@ sources:
 maintainers:
   - name: Conjur Maintainers
     email: conj_maintainers@cyberark.com
+
+dependencies:
+  - name: postgresql
+    version: 10.4.6
+    repository: https://charts.bitnami.com/bitnami
