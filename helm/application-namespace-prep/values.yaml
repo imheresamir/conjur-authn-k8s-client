@@ -1,7 +1,12 @@
+testAppName: test-summon-sidecar-app
+
 authnK8s:
   # These are required values
-  # goldenConfigMap: 
-  # namespace: 
+  goldenConfigMap:
+  namespace:
+  backendSecret: test-app-backend-secret
+  conjurAdminPassword:
+  backendPassword:
 
 authnRoleBinding:
   create: true

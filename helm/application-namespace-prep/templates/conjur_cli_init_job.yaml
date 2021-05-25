@@ -1,0 +1,48 @@
+{{- $backendUrl := printf "postgresql://%s-backend.%s.svc.cluster.local:%d/test_app" .Values.testAppName .Release.Namespace 5432 -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: conjur-cli-init-job
+  namespace: {{ .Release.Namespace }}
+  labels: 
+    app.kubernetes.io/name: conjur-cli-init-job
+    app.kubernetes.io/component: authn-k8s-conjur-cli-init-job
+    app.kubernetes.io/instance: {{ .Release.Namespace }}
+    app.kubernetes.io/part-of: authn-k8s-namespace-config
+    app.kubernetes.io/managed-by: Helm
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+spec:
+  template:
+    spec:
+      containers:
+        - name: load-conjur-policies
+          image: localhost:5000/conjur-cli:5-latest
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authnK8s.backendSecret }}
+                  key: postgresql-password
+            - name: CONJUR_ACCOUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: conjur-connect-configmap
+                  key: CONJUR_ACCOUNT
+            - name: CONJUR_APPLIANCE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: conjur-connect-configmap
+                  key: CONJUR_APPLIANCE_URL
+          command:
+            - "/bin/sh"
+            - "-c"
+            - |
+              yes yes | conjur init -a $CONJUR_ACCOUNT -u $CONJUR_APPLIANCE_URL
+              conjur authn login -u admin -p {{ .Values.authnK8s.conjurAdminPassword }}
+              {{ printf "conjur variable values add \"%s-db/url\" \"%s\"" .Values.testAppName $backendUrl }}
+              {{ printf "conjur variable values add %s-db/password $DB_PASSWORD" .Values.testAppName }}
+              {{ printf "conjur variable values add %s-db/username test_app" .Values.testAppName }}
+              conjur authn logout
+      restartPolicy: Never
+

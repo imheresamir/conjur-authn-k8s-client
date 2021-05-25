@@ -1,12 +1,18 @@
 # Default values for the Application Namespace Prep Helm chart
 # This is a YAML-formatted file.
 
+backendSecret: &backendSecretRef "test-app-backend-secret"
+
 app:
   image:
+    # repository: "localhost:5000/demo-app"
+    # tag: "latest"
     repository: "localhost:5000/test-sidecar-app"
     tag: "conjur-oss"
     # supported values: "Always", "IfNotPresent", "Never"
     pullPolicy: "Always"
+  
+  serviceType: "NodePort"
  
 authnClient:
   image:
@@ -16,15 +22,14 @@ authnClient:
     pullPolicy: "Always"
 
 conjur:
-  authnConfigMap:
-    name: "conjur-authn-configmap"
   # host/conjur/authn-k8s/<authenticator-ID>/<conjur-policy-layer-or-group>/<app-host-id>
   authnLogin:
+  authnConfigMap:
+    name: "conjur-authn-configmap"
+
+  connConfigMap: "conjur-connect-configmap"
 
 postgresql:
-  # These are required values
-  # postgresqlPassword:
-
   image:
     repository: postgres
     tag: 9.6
@@ -41,7 +46,7 @@ postgresql:
 
   tls:
     enabled: true
-    certificatesSecret: test-app-backend-certs
+    certificatesSecret: *backendSecretRef
     certFilename: server.crt
     certKeyFilename: server.key
 
@@ -50,3 +55,4 @@ postgresql:
 
   postgresqlDatabase: test_app
   postgresqlUsername: test_app
+  existingSecret: *backendSecretRef

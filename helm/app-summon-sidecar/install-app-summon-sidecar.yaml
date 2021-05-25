@@ -1,0 +1,366 @@
+---
+# Source: app-summon-sidecar/templates/test-app-summon-sidecar.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: test-app-summon-sidecar
+---
+# Source: app-summon-sidecar/templates/conjur_authn_configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: conjur-authn-configmap
+    labels:
+      release: RELEASE-NAME
+      heritage: Helm
+      app.kubernetes.io/name: authn-configmap
+      app.kubernetes.io/component: "app-conjur-authn-config"
+      app.kubernetes.io/instance: app-test
+      app.kubernetes.io/part-of: "authn-k8s-app-config"
+      helm.sh/chart: app-summon-sidecar-0.1.0
+data:
+    # authn-k8s Configuration 
+    conjurAuthnLogin: testLogin
+---
+# Source: app-summon-sidecar/charts/postgresql/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-summon-sidecar-app-backend-headless
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.4.6
+    app.kubernetes.io/instance: RELEASE-NAME
+    app.kubernetes.io/managed-by: Helm
+    # Use this annotation in addition to the actual publishNotReadyAddresses
+    # field below because the annotation will stop being respected soon but the
+    # field is broken in some versions of Kubernetes:
+    # https://github.com/kubernetes/kubernetes/issues/58662
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+  namespace: app-test
+spec:
+  type: ClusterIP
+  clusterIP: None
+  # We want all pods in the StatefulSet to have their addresses published for
+  # the sake of the other Postgresql pods even before they're ready, since they
+  # have to be able to talk to each other in order to become ready.
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: RELEASE-NAME
+---
+# Source: app-summon-sidecar/charts/postgresql/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-summon-sidecar-app-backend
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.4.6
+    app.kubernetes.io/instance: RELEASE-NAME
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+  namespace: app-test
+spec:
+  type: ClusterIP
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: RELEASE-NAME
+    role: primary
+---
+# Source: app-summon-sidecar/templates/test-app-summon-sidecar.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-app-summon-sidecar
+  labels:
+    app: test-app-summon-sidecar
+spec:
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 8080
+  selector:
+    app: test-app-summon-sidecar
+  type: NodePort
+---
+# Source: app-summon-sidecar/templates/test-app-summon-sidecar.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: test-app-summon-sidecar
+  name: test-app-summon-sidecar
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-app-summon-sidecar
+  template:
+    metadata:
+      labels:
+        app: test-app-summon-sidecar
+    spec:
+      serviceAccountName: test-app-summon-sidecar
+      containers:
+      - image: localhost:5000/test-sidecar-app:conjur-oss
+        imagePullPolicy: Always
+        name: test-app
+        ports:
+        - name: http
+          containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /pets
+            port: http
+          initialDelaySeconds: 15
+          timeoutSeconds: 5
+        env:
+          - name: CONJUR_AUTHN_TOKEN_FILE
+            value: /run/conjur/access-token
+        envFrom:
+        - configMapRef:
+            name: conjur-connect-configmap
+        volumeMounts:
+          - mountPath: /run/conjur
+            name: conjur-access-token
+            readOnly: true
+      - image: cyberark/conjur-authn-k8s-client:latest
+        imagePullPolicy: Always
+        name: authenticator
+        env:
+          - name: CONTAINER_MODE
+            value: sidecar
+          - name: MY_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: MY_POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: MY_POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: CONJUR_AUTHN_LOGIN
+            valueFrom:
+              configMapKeyRef:
+                name: conjur-authn-configmap
+                key: conjurAuthnLogin
+        envFrom:
+        - configMapRef:
+            name: conjur-connect-configmap
+        volumeMounts:
+          - mountPath: /run/conjur
+            name: conjur-access-token
+      imagePullSecrets:
+        - name: dockerpullsecret
+      volumes:
+        - name: conjur-access-token
+          emptyDir:
+            medium: Memory
+---
+# Source: app-summon-sidecar/charts/postgresql/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: test-summon-sidecar-app-backend
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.4.6
+    app.kubernetes.io/instance: RELEASE-NAME
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+  annotations:
+  namespace: app-test
+spec:
+  serviceName: test-summon-sidecar-app-backend-headless
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/instance: RELEASE-NAME
+      role: primary
+  template:
+    metadata:
+      name: test-summon-sidecar-app-backend
+      labels:
+        app.kubernetes.io/name: postgresql
+        helm.sh/chart: postgresql-10.4.6
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        role: primary
+        app.kubernetes.io/component: primary
+    spec:      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: postgresql
+                    app.kubernetes.io/instance: RELEASE-NAME
+                    app.kubernetes.io/component: primary
+                namespaces:
+                  - "app-test"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 999
+      initContainers:
+        - name: init-chmod-data
+          image: docker.io/bitnami/bitnami-shell:10
+          imagePullPolicy: "Always"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          command:
+            - /bin/sh
+            - -cx
+            - |
+              chown 1001:999 /data/
+              mkdir -p /data//data
+              chmod 700 /data//data
+              find /data/ -mindepth 1 -maxdepth 1 -not -name "conf" -not -name ".snapshot" -not -name "lost+found" | \
+                xargs chown -R 1001:999
+              chmod -R 777 /dev/shm
+              cp /tmp/certs/* /opt/bitnami/postgresql/certs/
+              chown -R 1001:999 /opt/bitnami/postgresql/certs/
+              chmod 600 /opt/bitnami/postgresql/certs/server.key
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: data
+              mountPath: /data/
+              subPath: 
+            - name: dshm
+              mountPath: /dev/shm
+            - name: raw-certificates
+              mountPath: /tmp/certs
+            - name: postgresql-certificates
+              mountPath: /opt/bitnami/postgresql/certs
+      containers:
+        - name: test-summon-sidecar-app-backend
+          image: docker.io/postgres:9.6
+          imagePullPolicy: "IfNotPresent"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/data/"
+            - name: PGDATA
+              value: "/data/pgdata"
+            - name: POSTGRES_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: test-app-backend-secret
+                  key: postgresql-postgres-password
+            - name: POSTGRES_USER
+              value: "test_app"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: test-app-backend-secret
+                  key: postgresql-password
+            - name: POSTGRES_DB
+              value: "test_app"
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "yes"
+            - name: POSTGRESQL_TLS_PREFER_SERVER_CIPHERS
+              value: "yes"
+            - name: POSTGRESQL_TLS_CERT_FILE
+              value: /opt/bitnami/postgresql/certs/server.crt
+            - name: POSTGRESQL_TLS_KEY_FILE
+              value: /opt/bitnami/postgresql/certs/server.key
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "false"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "test_app" -d "dbname=test_app" -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  exec pg_isready -U "test_app" -d "dbname=test_app" -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          volumeMounts:
+            - name: postgresql-certificates
+              mountPath: /opt/bitnami/postgresql/certs
+              readOnly: true
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /data/
+              subPath: 
+      volumes:
+        - name: raw-certificates
+          secret:
+            secretName: test-app-backend-secret
+        - name: postgresql-certificates
+          emptyDir: {}
+        - name: dshm
+          emptyDir:
+            medium: Memory
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"

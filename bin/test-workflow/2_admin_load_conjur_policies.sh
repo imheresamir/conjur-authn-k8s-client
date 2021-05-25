@@ -101,14 +101,14 @@ $cli cp ./policy $conjur_cli_pod:/policy
 
 wait_for_it 300 "$cli exec $conjur_cli_pod -- \
   bash -c \"
-  conjur_appliance_url=${CONJUR_APPLIANCE_URL:-https://conjur-oss.$CONJUR_NAMESPACE.svc.cluster.local}
+    CONJUR_APPLIANCE_URL=${CONJUR_APPLIANCE_URL} \
     CONJUR_ACCOUNT=${CONJUR_ACCOUNT} \
     CONJUR_ADMIN_PASSWORD=${CONJUR_ADMIN_PASSWORD} \
     DB_PASSWORD=${SAMPLE_APP_BACKEND_DB_PASSWORD} \
     TEST_APP_NAMESPACE_NAME=${TEST_APP_NAMESPACE_NAME} \
     TEST_APP_DATABASE=${TEST_APP_DATABASE} \
-    /policy/load_policies.sh
-  \"
+    /policy/load_policies.sh \
+  \" \
 "
 
 $cli exec $conjur_cli_pod -- rm -rf ./policy

@@ -4,13 +4,21 @@
         "authnK8s": {
             "required": [
                 "goldenConfigMap",
-                "namespace"
+                "namespace",
+                "backendSecret",
+                "conjurAdminPassword"
             ],
             "properties": {
                 "goldenConfigMap": {
                     "type": "string"
                 },
                 "namespace": {
+                    "type": "string"
+                },
+                "backendSecret": {
+                    "type": "string"
+                },
+                "conjurAdminPassword": {
                     "type": "string"
                 }
             }
