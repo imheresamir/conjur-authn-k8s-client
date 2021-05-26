@@ -4,7 +4,7 @@ set -eo pipefail
 
 cd "$(dirname "$0")" || ( echo "cannot cd into dir" && exit 1 )
 
-# . ./0_prep_conjur_in_kind.sh
+# ./0_prep_conjur_in_kind.sh
 
 . ./1_prep_check_dependencies.sh
 

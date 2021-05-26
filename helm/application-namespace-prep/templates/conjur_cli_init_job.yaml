@@ -45,4 +45,3 @@ spec:
               {{ printf "conjur variable values add %s-db/username test_app" .Values.testAppName }}
               conjur authn logout
       restartPolicy: Never
-

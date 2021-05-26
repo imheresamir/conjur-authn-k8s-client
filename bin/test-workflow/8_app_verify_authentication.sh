@@ -68,10 +68,7 @@ bl_retry_constant "${RETRIES}" "${RETRY_WAIT}"  check_pods
 # Apps don't have loadbalancer services, so test by curling from
 # a pod that is inside the KinD cluster.
 curl_cmd=pod_curl
-init_url="test-app-summon-init.$TEST_APP_NAMESPACE_NAME.svc.cluster.local:8080"
-init_url_with_host_outside_apps="test-app-with-host-outside-apps-branch-summon-init.$TEST_APP_NAMESPACE_NAME.svc.cluster.local:8080"
 sidecar_url="test-app-summon-sidecar.$TEST_APP_NAMESPACE_NAME.svc.cluster.local:8080"
-secretless_url="test-app-secretless.$TEST_APP_NAMESPACE_NAME.svc.cluster.local:8080"
 
 echo "Waiting for urls to be ready"
 

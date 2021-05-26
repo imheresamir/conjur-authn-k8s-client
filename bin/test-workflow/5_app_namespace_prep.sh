@@ -15,6 +15,7 @@ pushd $(dirname "$0")/../../helm/application-namespace-prep > /dev/null
         --create-namespace \
         --set authnK8s.goldenConfigMap="authn-k8s-configmap" \
         --set authnK8s.namespace="$CONJUR_NAMESPACE" \
+        # TODO: API Key, not password
         --set authnK8s.conjurAdminPassword="$(kubectl exec \
             --namespace "$CONJUR_NAMESPACE" \
             deploy/conjur-oss \
